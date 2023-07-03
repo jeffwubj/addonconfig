@@ -136,6 +136,9 @@ spec:
                   to ensure we''ve reconciled the correct AddonConfigDefinition after
                   a recreate controller +optional'
                 type: string
+              secretRef:
+                description: Name of the secret created by csi controller
+                type: string
             type: object
         type: object
     served: true

@@ -19,11 +19,12 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"text/template"
 	"time"
 
 	"github.com/pkg/errors"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	defaultingschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
@@ -36,6 +37,7 @@ import (
 	"sigs.k8s.io/cluster-api/controllers/external"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	addonv1 "github.com/tvs/addonconfig/api/v1alpha1"
 	templatev1 "github.com/tvs/addonconfig/types/template/v1alpha1"
@@ -442,7 +444,7 @@ func (r *AddonConfigReconciler) reconcileTemplate(ctx context.Context, atx *addo
 
 		// TODO(tvs): Write template to resultant resource
 		atx.RenderedTemplate = out.String()
-		log.Info("Successfully rendered template:", "render", r)
+		log.Info("Successfully rendered template:"+out.String(), "render", r)
 	}
 
 	conditions.MarkTrue(atx.AddonConfig, addonv1.ValidTemplateCondition)
@@ -452,6 +454,27 @@ func (r *AddonConfigReconciler) reconcileTemplate(ctx context.Context, atx *addo
 
 // TODO(tvs): Code up the saving element
 func (r *AddonConfigReconciler) saveRenderedTemplate(ctx context.Context, atx *addonConfigContext) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Start to saveRenderedTemplate")
+	if atx.AddonConfigDefinition.Spec.TemplateTarget.Kind == "Secret" {
+		inlineSecret := &v1.Secret{}
+		inlineSecret.Name = atx.AddonConfigDefinition.Spec.TemplateTarget.Name
+		inlineSecret.Namespace = atx.AddonConfig.Namespace
+		inlineSecret.Type = v1.SecretTypeOpaque
+		opResult, createOrPatchErr := controllerutil.CreateOrPatch(ctx, r.Client, inlineSecret, func() error {
+			// TODO ownerreference
+			inlineSecret.Data = map[string][]byte{}
+			inlineSecret.Data["values.yaml"] = []byte(atx.RenderedTemplate)
+			return nil
+		})
+		if createOrPatchErr != nil {
+			return ctrl.Result{}, createOrPatchErr
+		}
+		log.Info(fmt.Sprintf("Successfully create secret %s/%s for inline ValuesFrom %s", inlineSecret.Namespace, inlineSecret.Name, opResult))
+		atx.AddonConfig.Status.SecretRef = &inlineSecret.Name
+	} else {
+		log.Info("Skip AddonConfig Kind:"+atx.AddonConfig.Kind, "render", r)
+	}
 	return ctrl.Result{}, nil
 }
 

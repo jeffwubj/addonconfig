@@ -58,6 +58,10 @@ type AddonConfigStatus struct {
 	// ensure we've reconciled the correct AddonConfigDefinition after a recreate
 	// controller +optional
 	ObservedSchemaUID *apitypes.UID `json:"observedSchemaUID,omitempty" protobuf:"bytes,5,opt,name=observedSchemaUID"`
+
+	// Name of the secret created by csi controller
+	//+ kubebuilder:validation:Optional
+	SecretRef *string `json:"secretRef,omitempty"`
 }
 
 const (
